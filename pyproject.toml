@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "futurefood"
+version = "0.1.0"
+description = "Backend model for the Future Food Calculator"
+authors = [
+    { name = "Juan P. Cordero", email = "jpc563@york.ac.uk" }
+]
+readme = "README.md"
+license = { text = "MIT" }
+dependencies = [
+    "agrifoodpy",
+    "xarray",
+    "numpy",
+]
+requires-python = ">=3.11"
+
+[tool.setuptools]
+packages = ["future_food"]
