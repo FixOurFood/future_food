@@ -177,7 +177,8 @@ def datablock_setup(
     # Get AES key & IV from secrets
     AES_KEY = base64.b64decode(AES_KEY)
     AES_IV = base64.b64decode(AES_IV)
-    with open("UKCEH_LC_target_percentage.bin", "rb") as f:
+    import importlib.resources
+    with importlib.resources.files("future_food.data").joinpath("UKCEH_LC_target_percentage.bin").open("rb") as f:
         encrypted_data = f.read()
 
     # Decrypt the dataset
