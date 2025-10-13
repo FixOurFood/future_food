@@ -1265,7 +1265,6 @@ def agroecology_model(
     pctg = datablock["land"]["percentage_land_use"].copy(deep=True)
     food_orig = datablock["food"]["g/cap/day"].copy(deep=True)
     old_use = pctg.sel({"aggregate_class":land_type}).sum()
-    alc = datablock["land"]["dominant_classification"]
     timescale = datablock["global_parameters"]["timescale"]
 
     # Compute land percentages to be converted to agroecology and remove them

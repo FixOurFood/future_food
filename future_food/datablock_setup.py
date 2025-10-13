@@ -9,8 +9,6 @@ from Crypto.Util.Padding import unpad
 
 import importlib.resources as resources
 
-from agrifoodpy.impact.model import fbs_impacts
-
 def datablock_setup(
         AES_KEY,
         AES_IV,
@@ -28,9 +26,8 @@ def datablock_setup(
     """
 
     from agrifoodpy_data.food import FAOSTAT, Nutrients_FAOSTAT
-    from agrifoodpy_data.impact import PN18_FAOSTAT, UKNDC_FAOSTAT
+    from agrifoodpy_data.impact import UKNDC_FAOSTAT
     from agrifoodpy_data.population import UN
-    from agrifoodpy_data.land import NaturalEngland_ALC_1000 as ALC
 
     datablock = {}
     datablock["food"] = {}
@@ -73,7 +70,7 @@ def datablock_setup(
     # Select food consumption data from FAOSTAT
     # -----------------------------------------
 
-    FAOSTAT *= 1
+    # FAOSTAT *= 1
     # 1000 T / year
     food_uk = FAOSTAT.sel(Region=229, Year=2020).expand_dims("Year")
 
@@ -92,13 +89,17 @@ def datablock_setup(
     # ----------------
     # Emission factors
     # ----------------
+    # These are UK values for the entire population and year
     scale_ones = xr.DataArray(data = np.ones_like(food_uk.Year.values),
-                            coords = {"Year":food_uk.Year.values})
-    extended_impact = PN18_FAOSTAT["GHG Emissions (IPCC 2013)"].drop_vars(["Item_name", "Item_group", "Item_origin"]) * scale_ones
+                        coords = {"Year":food_uk.Year.values})
+
+    extended_impact = UKNDC_FAOSTAT["NDC_emissions_agriculture"].drop_vars(["Item_name", "Item_group", "Item_origin"]) * scale_ones
+    land_use_food_impact  = UKNDC_FAOSTAT["NDC_emissions_land_use"].drop_vars(["Item_name", "Item_group", "Item_origin"]) * scale_ones
 
     datablock["impact"]["gco2e/gfood"] = extended_impact
+    datablock["impact"]["gco2e/gfood_land"] = land_use_food_impact
 
-    cereal_items = food_uk.sel(Item=food_uk["Item_group"]=="Cereals - Excluding Beer").Item.values
+    # datablock["impact"]["g_co2e/year"] = fbs_impacts(food_uk, datablock["impact"]["gco2e/gfood"])
 
     # --------------------------
     # UK Per capita daily values
@@ -129,49 +130,6 @@ def datablock_setup(
     datablock["food"]["g_fat/cap/day"] = fats_cap_day_baseline
     datablock["food"]["g_co2e/cap/day"] = co2e_cap_day_baseline
 
-    # g_co2e / year
-
-    # These are UK values for the entire population and year
-    scale_ones = xr.DataArray(data = np.ones_like(food_uk.Year.values),
-                        coords = {"Year":food_uk.Year.values})
-
-    extended_impact = UKNDC_FAOSTAT["NDC_emissions_agriculture"].drop_vars(["Item_name", "Item_group", "Item_origin"]) * scale_ones
-    land_use_food_impact  = UKNDC_FAOSTAT["NDC_emissions_land_use"].drop_vars(["Item_name", "Item_group", "Item_origin"]) * scale_ones
-
-    datablock["impact"]["gco2e/gfood"] = extended_impact
-    datablock["impact"]["gco2e/gfood_land"] = land_use_food_impact
-
-    datablock["impact"]["g_co2e/year"] = fbs_impacts(food_uk, datablock["impact"]["gco2e/gfood"])
-
-    per_cap_day = {"Weight":food_cap_day_baseline,
-                "Energy":kcal_cap_day_baseline,
-                "Proteins":prot_cap_day_baseline,
-                "Fat":fats_cap_day_baseline,
-                "Emissions":co2e_cap_day_baseline}
-
-    # ------------------
-    # UK Per year values
-    # ------------------
-
-    # g_food, kCal, g_prot, g_fat, g_co2e / Year
-    food_year_baseline = food_cap_day_baseline * pop_past_uk * 365.25
-    kcal_year_baseline = kcal_cap_day_baseline * pop_past_uk * 365.25
-    prot_year_baseline = prot_cap_day_baseline * pop_past_uk * 365.25
-    fats_year_baseline = fats_cap_day_baseline * pop_past_uk * 365.25
-    co2e_year_baseline = co2e_cap_day_baseline * pop_past_uk * 365.25
-
-    datablock["food"]["g/year"] = food_year_baseline
-    datablock["food"]["kCal/year"] = kcal_year_baseline
-    datablock["food"]["g_prot/year"] = prot_year_baseline
-    datablock["food"]["g_fat/year"] = fats_year_baseline
-    datablock["food"]["g_co2e/year"] = co2e_year_baseline
-
-    per_year = {"Weight":food_year_baseline,
-                "Energy":kcal_year_baseline,
-                "Fat":fats_year_baseline,
-                "Proteins":prot_year_baseline,
-                "Emissions":co2e_year_baseline}
-
     # -------------------------------
     # Land use data
     # -------------------------------
@@ -187,14 +145,7 @@ def datablock_setup(
     decrypted_data = unpad(cipher.decrypt(encrypted_data), AES.block_size)
     LC = xr.open_dataarray(BytesIO(decrypted_data))
 
-    # Make sure the land use data and ALC data have the same coordinate base
-    ALC, LC = xr.align(ALC, LC, join="outer")
-    # peatland = xr.open_dataarray("images/peatland_binary_mask.nc")
-
-    # datablock["land"]["percentage_land_use"] = LC.where(np.isfinite(ALC.grade))
     datablock["land"]["percentage_land_use"] = LC
-    datablock["land"]["dominant_classification"] = ALC.grade
-    # datablock["land"]["peatland"] = peatland
 
     # -------------------------------
     # Baseline data for comparison
