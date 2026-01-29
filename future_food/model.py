@@ -102,6 +102,7 @@ def item_scaling_multiple(
         scale,
         source,
         scaling_nutrient,
+        element="food",
         elasticity=None,
         items=None,
         constant=True,
@@ -143,7 +144,7 @@ def item_scaling_multiple(
 
         out = balanced_scaling(fbs=out,
                                items=it_arr,
-                               element="food",
+                               element=element,
                                timescale=timescale,
                                year=2021,
                                scale=sc,
@@ -175,6 +176,7 @@ def item_scaling(
         scale,
         source,
         scaling_nutrient,
+        element='food',
         elasticity=None,
         items=None,
         constant=True,
@@ -201,7 +203,7 @@ def item_scaling(
     # Balanced scaling. Reduce food, reduce imports, keep kCal constant
     out = balanced_scaling(fbs=food_orig,
                            items=items,
-                           element="food",
+                           element=element,
                            timescale=timescale,
                            year=2021,
                            scale=scale,
