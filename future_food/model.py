@@ -105,6 +105,7 @@ def item_scaling_multiple(
         element="food",
         elasticity=None,
         items=None,
+        add=True,
         constant=True,
         non_sel_items=None
         ):
@@ -150,7 +151,7 @@ def item_scaling_multiple(
                                scale=sc,
                                adoption="logistic",
                                origin=source,
-                               add=True,
+                               add=add,
                                elasticity=elasticity,
                                constant=constant,
                                non_sel_items=non_sel_items)
