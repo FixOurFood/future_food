@@ -147,11 +147,16 @@ def datablock_setup(
 
     datablock["land"]["percentage_land_use"] = LC
 
+    land_use_areas = LC.sum(dim=["x", "y"])
+
+    datablock["land"]["area_land_use"] = land_use_areas
+
     # -------------------------------
     # Baseline data for comparison
     # -------------------------------
 
     datablock["land"]["baseline"] = copy.deepcopy(datablock["land"]["percentage_land_use"])
     datablock["food"]["baseline"] = copy.deepcopy(datablock["food"]["g/cap/day"])
+    datablock["land"]["area_baseline"] = copy.deepcopy(datablock["land"]["area_land_use"])
 
     return datablock
