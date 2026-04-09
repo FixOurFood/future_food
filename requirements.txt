@@ -1,0 +1,5 @@
+agrifoodpy
+xarray
+numpy
+pycryptodome
+scipy
