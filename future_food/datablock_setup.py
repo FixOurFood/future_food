@@ -12,7 +12,9 @@ import importlib.resources as resources
 def datablock_setup(
         AES_KEY,
         AES_IV,
-        advanced_settings = {}
+        advanced_settings = {},
+        years = np.arange(2020, 2051),
+        map_binning = 1
         ):
 
     """
@@ -47,7 +49,7 @@ def datablock_setup(
 
     area_fao = 229 #UK
     # area_fao = 5000 # WORLD
-    years = np.arange(2020, 2051)
+    # years = np.arange(2020, 2051)
 
     # ------------------------------
     # Select population data from UN
@@ -145,7 +147,35 @@ def datablock_setup(
     decrypted_data = unpad(cipher.decrypt(encrypted_data), AES.block_size)
     LC = xr.open_dataarray(BytesIO(decrypted_data))
 
+    LC = LC.coarsen(x=map_binning, y=map_binning, boundary="trim").mean()
+    # LC = LC.coarsen(x=map_binning, y=map_binning, boundary="trim").sum()
+
+    LC = LC.expand_dims(dim={"Year": years})
+
+    # # Add empty coordinates for aggregate_class dimension
+    # new_classes = [
+    #     "New Broadleaf woodland",
+    #     "New Coniferous woodland",
+    #     "Restored upland peat",
+    #     "Restored lowland peat",
+    #     "Managed arable",
+    #     "Managed pasture",
+    #     "Mixed farming",
+    #     "Bioenergy crops (pasture)",
+    #     "Bioenergy crops (arable)",
+    #     "Agroforestry",
+    #     "Silvopasture"
+    #     ]
+    
+    # for new_class in new_classes:
+    #     new_class_arr = xr.zeros_like(LC.isel(aggregate_class=0)).where(np.isfinite(LC.isel(aggregate_class=0)))
+    #     new_class_arr["aggregate_class"] = new_class
+    #     LC = xr.concat([LC, new_class_arr], dim="aggregate_class")
+
+    area_per_pixel = map_binning**2
+
     datablock["land"]["percentage_land_use"] = LC
+    datablock["land"]["area_per_pixel"] = area_per_pixel
 
     # -------------------------------
     # Baseline data for comparison

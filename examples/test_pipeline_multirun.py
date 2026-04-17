@@ -3,6 +3,7 @@ from future_food.pipeline_builder import pipeline_setup
 from agrifoodpy.pipeline import Pipeline
 import copy
 import numpy as np
+import sys
 
 from agrifoodpy.food.food import FoodBalanceSheet
 import matplotlib.pyplot as plt
@@ -117,24 +118,39 @@ datablock = datablock_setup(
     # years = np.arange(2020, 2051),
 )
 
-it = Timer()
-db_copy = copy.deepcopy(datablock)
+times = []
 
-fs = Pipeline(datablock=db_copy)
+if __name__ == "__main__":
 
-fs = pipeline_setup(
-    fs,
-    slider_values,
-    advanced_settings,
-    )
+    runs = int(sys.argv[1]) if len(sys.argv) > 1 else 10
 
-# it.ping("Pipeline setup time: ")
+    for i in range(runs):
 
-fs.run(timing=True)
+        it = Timer()
+        db_copy = copy.deepcopy(datablock)
 
-it.total("Total execution time: ")
+        fs = Pipeline(datablock=db_copy)
 
-print(fs.datablock["metrics"]["total_emissions"], end=" ")
-print(fs.datablock["metrics"]["SSR_metric_yr"].values)
+        fs = pipeline_setup(
+            fs,
+            slider_values,
+            advanced_settings,
+            )
 
+        # it.ping("Pipeline setup time: ")
+
+        fs.run()
+        it.ping(message=None)
+        it.total("Total execution time: ")
+
+        times.append(it.elapsed_time)
+
+        print(fs.datablock["metrics"]["total_emissions"], end=" ")
+        print(fs.datablock["metrics"]["SSR_metric_yr"].values)
+
+print("Total runs: ", len(times))
+print("Average time: ", sum(times)/len(times))
+print("Min time: ", min(times))
+print("Max time: ", max(times))
+print("Standard deviation: ", np.std(times))
 

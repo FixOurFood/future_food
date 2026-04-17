@@ -9,7 +9,8 @@ from agrifoodpy.food.food import FoodBalanceSheet
 
 def project_future(
         datablock,
-        yield_change=None
+        years,
+        yield_change=None,
         ):
     """Project future food consumption based on scale
 
@@ -29,11 +30,10 @@ def project_future(
     datablock : Dict
         New dictionary containinng projected food consumption data
     """
-    years = np.arange(2021, 2051)
 
     pop = datablock["population"]["population"]
 
-    scale = pop.sel(Region=826, Year=np.arange(2021, 2051)) \
+    scale = pop.sel(Region=826, Year=years) \
         / pop.sel(Region=826, Year=2020)
 
     # Per capita per day values remain constant
@@ -63,7 +63,7 @@ def project_future(
     if yield_change is not None:
         scale_tot = scale_tot.expand_dims({"Item": g_cap_day.Item.values})
         scale_yield = xr.ones_like(scale_tot)
-        scale_yield.loc[{"Item": cereal_items}] = linear_scale(2020, 2020, 2050, 2050, c_init=1, c_end=1+yield_change)
+        scale_yield.loc[{"Item": cereal_items}] = linear_scale(2020, 2020, 2050, 2050, c_init=1, c_end=1+yield_change).sel(Year=scale_tot.Year)
         scale_tot = scale_tot / scale_yield
 
     # Scale food production and balance using imports
@@ -147,7 +147,7 @@ def item_scaling_multiple(
                                items=it_arr,
                                element=element,
                                timescale=timescale,
-                               year=2021,
+                               year=2020,
                                scale=sc,
                                adoption="logistic",
                                origin=source,
@@ -206,7 +206,7 @@ def item_scaling(
                            items=items,
                            element=element,
                            timescale=timescale,
-                           year=2021,
+                           year=2020,
                            scale=scale,
                            adoption="logistic",
                            origin=source,
@@ -445,7 +445,7 @@ def food_waste_model(
     waste_factor = waste_factor.to_numpy()
 
     # Create a logistic curve starting at 1, ending at 1-waste_factor
-    scale_waste = logistic_food_supply(food_orig, timescale, 1, 1-waste_factor)
+    scale_waste = logistic_food_supply(food_orig, timescale, 1, 1-waste_factor, years=food_orig.Year.values)
 
     # Set to "imports" or "production" to choose which element of the food system supplies the change in consumption
     # Scale food and subtract difference from production
@@ -512,7 +512,7 @@ def alternative_food_model(
     kcal_orig = food_orig * kcal_fact
     food_base = copy.deepcopy(datablock["food"]["baseline_projected"])
 
-    scale_alternative = logistic_food_supply(food_orig, timescale, 0, cultured_scale)
+    scale_alternative = logistic_food_supply(food_orig, timescale, 0, cultured_scale, years=food_orig.Year.values)
 
     # This is the new alternative food consumption
     delta_alternative = (food_base["food"].sel(Item=baseline_items) * scale_alternative).sum(dim="Item")
@@ -603,7 +603,7 @@ def cultured_meat_model(
     food_orig = copy.deepcopy(datablock["food"]["g/cap/day"])
     kcal_orig = copy.deepcopy(datablock["food"]["kCal/cap/day"])
 
-    scale_labmeat = logistic_food_supply(food_orig, timescale, 1, 1-cultured_scale)
+    scale_labmeat = logistic_food_supply(food_orig, timescale, 1, 1-cultured_scale, years=food_orig.Year.values)
 
     # Scale and remove from suplying element
     out = food_orig.fbs.scale_add(element_in="food",
@@ -776,8 +776,8 @@ def forest_land_model_new(
     scale_use_arable = (new_use_arable/old_use_arable).to_numpy()
 
     food_orig = datablock["food"]["g/cap/day"]
-    scale_forest_pasture = logistic_food_supply(food_orig, timescale, 1, scale_use_pasture)
-    scale_forest_arable = logistic_food_supply(food_orig, timescale, 1, scale_use_arable)
+    scale_forest_pasture = logistic_food_supply(food_orig, timescale, 1, scale_use_pasture, years=food_orig.Year.values)
+    scale_forest_arable = logistic_food_supply(food_orig, timescale, 1, scale_use_arable, years=food_orig.Year.values)
 
     scaled_items_pasture = food_orig.sel(Item=food_orig.Item_origin=="Animal Products").Item.values
     scaled_items_arable = food_orig.sel(Item=food_orig.Item_origin=="Vegetal Products").Item.values
@@ -869,8 +869,8 @@ def forest_land_model(
     scale_use_arable = (new_use_arable/old_use_arable).to_numpy()
 
     food_orig = datablock["food"]["g/cap/day"]
-    scale_forest_pasture = logistic_food_supply(food_orig, timescale, 1, scale_use_pasture)
-    scale_forest_arable = logistic_food_supply(food_orig, timescale, 1, scale_use_arable)
+    scale_forest_pasture = logistic_food_supply(food_orig, timescale, 1, scale_use_pasture, years=food_orig.Year.values)
+    scale_forest_arable = logistic_food_supply(food_orig, timescale, 1, scale_use_arable, years=food_orig.Year.values)
 
     scaled_items_pasture = food_orig.sel(Item=food_orig.Item_origin=="Animal Products").Item.values
     scaled_items_arable = food_orig.sel(Item=food_orig.Item_origin=="Vegetal Products").Item.values
@@ -954,7 +954,7 @@ def peatland_restoration(
     scale_use = (new_use/old_use).to_numpy()
 
     food_orig = datablock["food"]["g/cap/day"]
-    scale_spare = logistic_food_supply(food_orig, timescale, 1, scale_use)
+    scale_spare = logistic_food_supply(food_orig, timescale, 1, scale_use, years=food_orig.Year.values)
 
     scaled_items = food_orig.sel(Item=food_orig.Item_origin==items).Item.values
 
@@ -998,16 +998,17 @@ def ccs_model(
     timescale = datablock["global_parameters"]["timescale"]
     food_orig = datablock["food"]["g/cap/day"]
     pctg = datablock["land"]["percentage_land_use"]
+    area_per_pixel = datablock["land"]["area_per_pixel"]
 
     # Compute the total area of BECCS land used in hectares, and the total
     # sequestration in Mt CO2e / year
 
-    pasture_BECCS_area = pctg.sel({"aggregate_class":"Bioenergy crops (pasture)"}).sum().to_numpy()
-    arable_BECCS_area = pctg.sel({"aggregate_class":"Bioenergy crops (arable)"}).sum().to_numpy()
+    pasture_BECCS_area = pctg.sel({"aggregate_class":"Bioenergy crops (pasture)"}).sum(dim=["x", "y"]).to_numpy() * area_per_pixel
+    arable_BECCS_area = pctg.sel({"aggregate_class":"Bioenergy crops (arable)"}).sum(dim=["x", "y"]).to_numpy() * area_per_pixel
     land_BECCS = pasture_BECCS_area * datablock["advanced_settings"]["BECCS_pasture_tco2_ha_yr"]
     land_BECCS += arable_BECCS_area * datablock["advanced_settings"]["BECCS_arable_tco2_ha_yr"]
 
-    logistic_0_val = logistic_food_supply(food_orig, timescale, 0, 1)
+    logistic_0_val = logistic_food_supply(food_orig, timescale, 0, 1, years=food_orig.Year.values)
 
     waste_BECCS_seq_array = waste_BECCS * logistic_0_val
     overseas_BECCS_seq_array = overseas_BECCS * logistic_0_val
@@ -1042,6 +1043,8 @@ def forest_sequestration_model(
         ):
     """Computes total annual sequestration from the different sources"""
 
+    area_per_pixel = datablock["land"]["area_per_pixel"]
+
     if np.isscalar(land_type):
         land_type = [land_type]
 
@@ -1053,16 +1056,14 @@ def forest_sequestration_model(
 
     # Load the land use data from the datablock
     pctg = datablock["land"]["percentage_land_use"].copy(deep=True)
-    logistic_0_val = logistic_food_supply(food_orig, timescale, 0, 1)
+    logistic_0_val = logistic_food_supply(food_orig, timescale, 0, 1, years=food_orig.Year.values)
 
     for land_type_i, seq_i in zip(land_type, seq):
 
         # Compute forest area in ha, maximum anual sequestration, and growth curve
-        area_land = pctg.loc[{"aggregate_class":land_type_i}].sum().to_numpy()
-        max_seq = area_land * seq_i
+        area_land = pctg.loc[{"aggregate_class":land_type_i}].sum(dim=["x", "y"]) * area_per_pixel
 
-
-        land_type_seq = max_seq * logistic_0_val
+        land_type_seq = area_land * seq_i
 
         # Create a dataset with the different sequestration sources
         seq_ds = xr.Dataset({land_type_i: land_type_seq})
@@ -1099,7 +1100,7 @@ def scale_impact(
     items = get_items(food_orig, items)
 
     # scale the impacts using the baseline values as reference
-    scale = logistic_food_supply(food_orig, timescale, 0, scale_factor)
+    scale = logistic_food_supply(food_orig, timescale, 0, scale_factor, years=food_orig.Year.values)
     delta = impacts_baseline.loc[{"Item": items}] * scale
     impacts.loc[{"Item": items}] = impacts.loc[{"Item": items}] - delta
     datablock["impact"]["gco2e/gfood"] = impacts
@@ -1124,7 +1125,7 @@ def scale_production(
     # if no items are specified, do nothing
     items = get_items(food_orig, items)
 
-    scale_prod = logistic_food_supply(food_orig, timescale, 1, scale_factor)
+    scale_prod = logistic_food_supply(food_orig, timescale, 1, scale_factor, years=food_orig.Year.values)
 
     out = food_orig.fbs.scale_add(element_in="production",
                                 element_out="imports",
@@ -1203,7 +1204,7 @@ def BECCS_farm_land(
     scale_use = (new_use/old_use).fillna(1).to_numpy()
 
     food_orig = datablock["food"]["g/cap/day"]
-    scale_spare = logistic_food_supply(food_orig, timescale, 1, scale_use)
+    scale_spare = logistic_food_supply(food_orig, timescale, 1, scale_use, years=food_orig.Year.values)
 
     # scaled_items = food_orig.sel(Item=food_orig.Item_origin=="Vegetal Products").Item.values
     scaled_items = get_items(food_orig, items)
@@ -1292,7 +1293,7 @@ def agroecology_model(
         scale_use = (new_use/old_use) + (1-tree_coverage) * (1-new_use/old_use)
         scale_use = scale_use.to_numpy()
 
-        scale_arr = logistic_food_supply(out, timescale, 1, scale_use)
+        scale_arr = logistic_food_supply(out, timescale, 1, scale_use, years=food_orig.Year.values)
 
         out = out.fbs.scale_add(element_in="production",
                                 element_out="imports",
@@ -1316,7 +1317,7 @@ def agroecology_model(
             old_production = food_orig["production"].sel({"Item":item}).isel(Year=-1)
             new_production = old_production + yld * delta_agroecology.sum()/pop
             production_scale = (new_production / old_production).to_numpy()
-            production_scale_array = logistic_food_supply(food_orig, timescale, 1, production_scale)
+            production_scale_array = logistic_food_supply(food_orig, timescale, 1, production_scale, years=food_orig.Year.values)
 
             out = out.fbs.scale_add(element_in="production",
                                 element_out="imports",
@@ -1328,7 +1329,7 @@ def agroecology_model(
     area_agroecology = pctg.loc[{"aggregate_class":agroecology_class}].sum().to_numpy()
     max_seq_agroecology = area_agroecology * seq_ha_yr
 
-    agroecology_seq = logistic_food_supply(food_orig, timescale, 1, c_end=max_seq_agroecology)
+    agroecology_seq = logistic_food_supply(food_orig, timescale, 1, c_end=max_seq_agroecology, years=food_orig.Year.values)
 
     # Create a dataset with the different sequestration sources
     seq_ds = xr.Dataset({agroecology_class: agroecology_seq})
@@ -1439,7 +1440,8 @@ def logistic_food_supply(
         fbs,
         timescale,
         c_init,
-        c_end
+        c_end,
+        years
         ):
     """Creates a logistic curve using the year range of the input food balance
     supply"""
@@ -1449,7 +1451,7 @@ def logistic_food_supply(
     y2 = 2021 + timescale
     y3 = fbs.Year.values[-1]
 
-    scale = logistic_scale(y0, y1, y2, y3, c_init=c_init, c_end=c_end)
+    scale = logistic_scale(y0, y1, y2, y3, c_init=c_init, c_end=c_end).sel(Year=years)
 
     return scale
 
@@ -1609,7 +1611,7 @@ def zero_land_farming_model(
     items = [item for item in items if item in plant_items]
 
     # Create scaling array
-    scale = logistic_food_supply(food_orig, timescale, 1, fraction)
+    scale = logistic_food_supply(food_orig, timescale, 1, fraction, years=food_orig.Year.values)
 
     # Compute ratio of plant products now being produced in urban/vertical farms
     food_to_shift = food_orig["production"].sel(Item=items).sum(dim="Item") * scale
@@ -1649,7 +1651,7 @@ def extra_urban_farming(
     timescale = datablock["global_parameters"]["timescale"]
 
     # Create scaling array
-    scale = logistic_food_supply(food_orig, timescale, 0, fraction)
+    scale = logistic_food_supply(food_orig, timescale, 0, fraction, years=food_orig.Year.values)
 
     # Compute quantity of products now being produced in urban/vertical farms
     delta = food_base["production"].sel(Item=items) * scale
@@ -1718,7 +1720,7 @@ def mixed_farming_model(
     items = get_items(food_orig, items)
     secondary_items = get_items(food_orig, secondary_items)
 
-    scale = logistic_food_supply(food_orig, timescale, 1, arable_scale)
+    scale = logistic_food_supply(food_orig, timescale, 1, arable_scale, years=food_orig.Year.values)
 
     out = food_orig.fbs.scale_add(element_in="production",
                                   element_out="imports",
@@ -1733,7 +1735,7 @@ def mixed_farming_model(
     secondary_ratio = 1 + mixed_farm_to_secondary_ratio * secondary_prod_scale_factor
     secondary_ratio = secondary_ratio.values
 
-    secondary_scale = logistic_food_supply(food_orig, timescale, 1, secondary_ratio)
+    secondary_scale = logistic_food_supply(food_orig, timescale, 1, secondary_ratio, years=food_orig.Year.values)
 
     out = out.fbs.scale_add(element_in="production",
                                   element_out="exports",
@@ -1801,10 +1803,10 @@ def shift_production(
     items_target = get_items(food_orig, items_target)
 
     # Create scaling array
-    scale_items = logistic_food_supply(food_orig, timescale, 1, 1 + scale)
+    scale_items = logistic_food_supply(food_orig, timescale, 1, 1 + scale, years=food_orig.Year.values)
 
     scale_target = 1 - land_area_ratio * scale
-    scale_target = logistic_food_supply(food_orig, timescale, 1, scale_target)
+    scale_target = logistic_food_supply(food_orig, timescale, 1, scale_target, years=food_orig.Year.values)
 
     # Scale production quantities
 
@@ -2000,36 +2002,53 @@ def compute_metrics(
         else:
             datablock["metrics"]["livestock"] = xr.concat([datablock["metrics"]["livestock"], da], dim="Item")
 
+    # --------
     # Land use
-    pctg = datablock["land"]["percentage_land_use"]
-    totals = pctg.sum(dim=["x", "y"])
+    # --------
 
+    pctg = datablock["land"]["percentage_land_use"]
+    area_per_pixel = datablock["land"]["area_per_pixel"]
+    totals = pctg.sum(dim=["x", "y"]) * area_per_pixel
+
+    # Total pasture
     total_pasture = totals.sel(aggregate_class=["Improved grassland",
                                                 "Semi-natural grassland",
                                                 "Managed pasture",
-                                                "Silvopasture"]).sum().values
+                                                "Silvopasture"]).sum(dim="aggregate_class").values
+    
+    datablock["metrics"]["total_pasture"] = total_pasture
 
-    baseline_pasture = datablock["land"]["baseline"].sel(aggregate_class=["Improved grassland",
-                                                                          "Semi-natural grassland"]).sum().values
+    # Baseline pasture
+    baseline_pasture = datablock["land"]["baseline"].sel(
+        aggregate_class=[
+            "Improved grassland",
+            "Semi-natural grassland"
+            ]).sum(dim=["aggregate_class", "x", "y"]).values * area_per_pixel
+
+    datablock["metrics"]["baseline_pasture"] = baseline_pasture
 
     total_forest = totals.sel(aggregate_class=["Broadleaf woodland",
                                                "Coniferous woodland",
                                                "New Broadleaf woodland",
-                                               "New Coniferous woodland"]).sum().values
+                                               "New Coniferous woodland"]).sum(dim="aggregate_class").values
 
-    new_forest_land = (total_forest - datablock["land"]["baseline"].sel(aggregate_class=["Broadleaf woodland", "Coniferous woodland"]).sum().values)
+    baseline_forest_land = datablock["land"]["baseline"].sel(aggregate_class=["Broadleaf woodland", "Coniferous woodland"]).sum(dim=["aggregate_class","x","y"]).values * area_per_pixel
+    new_forest_land = (total_forest - baseline_forest_land)
 
-    baseline_forest = datablock["land"]["baseline"].sel(aggregate_class=["Broadleaf woodland",
-                                                                         "Coniferous woodland"]).sum().values
+    baseline_forest = datablock["land"]["baseline"].sel(
+        aggregate_class=[
+            "Broadleaf woodland",
+            "Coniferous woodland"
+            ]).sum(dim=["aggregate_class", "x", "y"]).values * area_per_pixel
 
     total_arable = totals.sel(aggregate_class=["Arable",
                                                "Managed arable",
                                                "Mixed farming",
-                                               "Agroforestry"]).sum().values
+                                               "Agroforestry"]).sum(dim="aggregate_class").values
 
-    total_agroforestry = totals.sel(aggregate_class="Agroforestry").sum().values
-    total_silvopasture = totals.sel(aggregate_class="Silvopasture").sum().values
-    total_mixed_farming = totals.sel(aggregate_class="Mixed farming").sum().values
+    total_agroforestry = totals.sel(aggregate_class=["Agroforestry"]).sum(dim="aggregate_class").values
+    total_silvopasture = totals.sel(aggregate_class=["Silvopasture"]).sum(dim="aggregate_class").values
+    total_mixed_farming = totals.sel(aggregate_class=["Mixed farming"]).sum(dim="aggregate_class").values
     total_beccs = totals.sel(aggregate_class=["Bioenergy crops (pasture)", "Bioenergy crops (arable)"]).sum().values
 
     if datablock["run_params"]["land_BECCS_pasture"] + datablock["run_params"]["land_BECCS"] != 0:
@@ -2039,18 +2058,17 @@ def compute_metrics(
         beccs_on_pasture = 0
         beccs_on_arable = 0
 
-    baseline_arable = datablock["land"]["baseline"].sel(aggregate_class=["Arable"]).sum().values
+    baseline_arable = datablock["land"]["baseline"].sel(
+        aggregate_class=["Arable"]).sum(dim=["aggregate_class","x", "y"]).values * area_per_pixel
 
     new_arable_land_pctg = (total_arable - baseline_arable) / baseline_arable * 100
     new_pasture_land_pctg = (total_pasture - baseline_pasture) / baseline_pasture * 100
 
-    total_restored_peatland = totals.sel(aggregate_class=["Restored upland peat", "Restored lowland peat"]).sum().values
+    total_restored_peatland = totals.sel(aggregate_class=["Restored upland peat", "Restored lowland peat"]).sum(dim="aggregate_class").values
 
     datablock["metrics"]["total_restored_peatland"] = total_restored_peatland
-    datablock["metrics"]["total_pasture"] = total_pasture
     datablock["metrics"]["total_forest"] = total_forest
     datablock["metrics"]["total_arable"] = total_arable
-    datablock["metrics"]["baseline_pasture"] = baseline_pasture
     datablock["metrics"]["baseline_forest"] = baseline_forest
     datablock["metrics"]["baseline_arable"] = baseline_arable
     datablock["metrics"]["new_forest_land"] = new_forest_land
