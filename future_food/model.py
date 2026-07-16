@@ -107,7 +107,8 @@ def item_scaling_multiple(
         items=None,
         add=True,
         constant=True,
-        non_sel_items=None
+        non_sel_items=None,
+        reexport_feed=False
         ):
     """Reduces per capita intake quantities and replaces them by other items
     keeping the overall consumption constant. Scales land use if production
@@ -126,7 +127,7 @@ def item_scaling_multiple(
     timescale = datablock["global_parameters"]["timescale"]
     # We can use any quantity here, either per cap/day or per year. The ratio
     # will cancel out the population growth
-    food_orig = datablock["food"][scaling_nutrient]
+    food_orig = datablock["food"][scaling_nutrient].fillna(0)
 
     if np.isscalar(source):
         source = [source]
@@ -157,17 +158,19 @@ def item_scaling_multiple(
                                non_sel_items=non_sel_items)
 
     # Scale feed, seed and processing
-    out = feed_scale(out, food_orig)
+    if reexport_feed:
+        out = feed_scale(out, food_orig, source="exports", add=False)
+
+    else:
+        out = feed_scale(out, food_orig)
 
     # out = check_negative_source(out, "production", "imports")
     out = check_negative_source(out, "imports", "exports", add=False)
 
-    ratio = out / food_orig
-    ratio = ratio.where(~np.isnan(ratio), 1)
-
-    # Update per cap/day values and per year values using the same ratio, which
-    # is independent of population growth
-    datablock["food"]["g/cap/day"] *= ratio
+    datablock["food"][scaling_nutrient] = out
+    datablock["food"]["g/cap/day"] = out / datablock["food"]["kCal/g_food"]
+    datablock["food"]["g_prot/cap/day"] = datablock["food"]["g_prot/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_fat/cap/day"] = datablock["food"]["g_fat/g_food"] * datablock["food"]["g/cap/day"]
 
     return datablock
 
@@ -190,7 +193,7 @@ def item_scaling(
     timescale = datablock["global_parameters"]["timescale"]
     # We can use any quantity here, either per cap/day or per year. The ratio
     # will cancel out the population growth
-    food_orig = datablock["food"][scaling_nutrient]
+    food_orig = datablock["food"][scaling_nutrient].fillna(0)
 
     if np.isscalar(source):
         source = [source]
@@ -221,14 +224,10 @@ def item_scaling(
     # out = check_negative_source(out, "production", "imports")
     out = check_negative_source(out, "imports", "exports", add=False)
 
-    ratio = out / food_orig
-    ratio = ratio.where(~np.isnan(ratio), 1)
-
-    # Update per cap/day values and per year values using the same ratio, which
-    # is independent of population growth
-    qty_key = ["g/cap/day", "g_prot/cap/day", "g_fat/cap/day", "kCal/cap/day"]
-    for key in qty_key:
-        datablock["food"][key] *= ratio
+    datablock["food"][scaling_nutrient] = out
+    datablock["food"]["g/cap/day"] = out / datablock["food"]["kCal/g_food"]
+    datablock["food"]["g_prot/cap/day"] = datablock["food"]["g_prot/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_fat/cap/day"] = datablock["food"]["g_fat/g_food"] * datablock["food"]["g/cap/day"]
 
     return datablock
 
@@ -384,7 +383,7 @@ def balanced_scaling(
         items,
         add=add,
         elasticity=elasticity)
-
+    
     if constant:
 
         delta = out[element] - fbs[element]
@@ -426,7 +425,8 @@ def food_waste_model(
         waste_scale,
         kcal_rda,
         source,
-        elasticity=None
+        elasticity=None,
+        reexport_feed=False
         ):
     """Reduces daily per capita per day intake energy above a set threshold.
     """
@@ -453,18 +453,21 @@ def food_waste_model(
                                   element_out=source,
                                   scale=scale_waste,
                                   elasticity=elasticity)
+    
+    if reexport_feed:
+        out = feed_scale(out, food_orig, source="exports", add=False)
 
-    # Scale feed, seed and processing
-    out = feed_scale(out, food_orig)
+    else:
+        # Scale feed, seed and processing
+        out = feed_scale(out, food_orig)
 
     # If supply element is negative, set to zero and add the negative delta to imports
     out = check_negative_source(out, "imports", "exports", add=False)
 
-    # Scale all per capita qantities proportionally
-    ratio = out / food_orig
-    ratio = ratio.where(~np.isnan(ratio), 1)
-
-    datablock["food"]["g/cap/day"] *= ratio
+    datablock["food"]["kCal/cap/day"] = out
+    datablock["food"]["g/cap/day"] = out / datablock["food"]["kCal/g_food"]
+    datablock["food"]["g_prot/cap/day"] = datablock["food"]["g_prot/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_fat/cap/day"] = datablock["food"]["g_fat/g_food"] * datablock["food"]["g/cap/day"]
 
     return datablock
 
@@ -549,13 +552,13 @@ def alternative_food_model(
                             scale=scale_target_calories,
                             elasticity=elasticity)
 
-    # Check negative source elements
-    out = check_negative_source(out, "production")
-    out = check_negative_source(out, "imports", "exports", add=False)
-
     # Adjust feed and seed from animal production
     out = feed_scale(out, food_orig)
     datablock["food"]["g/cap/day"] = out
+
+    # Check negative source elements
+    out = check_negative_source(out, "production")
+    out = check_negative_source(out, "imports", "exports", add=False)
 
     # Add emissions factor for cultured meat
     datablock["impact"]["gco2e/gfood"] = datablock["impact"]["gco2e/gfood"].fbs.add_items(new_items)
@@ -1358,50 +1361,53 @@ def agroecology_model(
 
 
 def feed_scale(
-        fbs,
-        ref,
+        ons_fbs,
+        ref_fbs,
         elasticity=None,
-        source="production"
+        source="production",
+        add=True
         ):
     """Scales the feed, seed and processing quantities according to the change
     in production of animal and vegetal products"""
 
     # Obtain reference production values
-    ref_feed_arr = ref["production"].sel(Item=ref.Item_origin=="Animal Products").sum(dim="Item")
-    ref_seed_arr = ref["production"].sel(Item=ref.Item_origin=="Vegetal Products").sum(dim="Item")
+    ref_feed_arr = ref_fbs["production"].sel(Item=ref_fbs.Item_origin=="Animal Products").sum(dim="Item")
+    obs_feed_arr = ons_fbs["production"].sel(Item=ons_fbs.Item_origin=="Animal Products").sum(dim="Item")
+
+    ref_seed_arr = ref_fbs["production"].sel(Item=ref_fbs.Item_origin=="Vegetal Products").sum(dim="Item")
+    obs_seed_arr = ons_fbs["production"].sel(Item=ons_fbs.Item_origin=="Vegetal Products").sum(dim="Item")
 
     # Compute scaling factors for feed and seed based on proportional production
-    feed_scale = fbs["production"].sel(Item=fbs.Item_origin=="Animal Products").sum(dim="Item") \
-                / ref_feed_arr
-    seed_scale = fbs["production"].sel(Item=fbs.Item_origin=="Vegetal Products").sum(dim="Item") \
-                / ref_seed_arr
-
+    feed_scale = obs_feed_arr / ref_feed_arr
+    seed_scale = obs_seed_arr / ref_seed_arr
+    
     # Set feed_scale and seed_scale to 1 where ref arrays are close or equal to zero
     feed_scale = xr.where(np.isclose(ref_feed_arr, 0), 1, feed_scale)
     seed_scale = xr.where(np.isclose(ref_seed_arr, 0), 1, seed_scale)
 
-    processing_scale = fbs["production"].sum(dim="Item") \
-                / ref["production"].sum(dim="Item")
+    processing_scale = ons_fbs["production"].sum(dim="Item") \
+                / ref_fbs["production"].sum(dim="Item")
+    
 
     if elasticity is not None:
-        out = fbs.fbs.scale_add(element_in="feed", element_out=source,
-                                scale=feed_scale, elasticity=elasticity)
+        out = ons_fbs.fbs.scale_add(element_in="feed", element_out=source,
+                                scale=feed_scale, elasticity=elasticity, add=add)
 
         out = out.fbs.scale_add(element_in="seed",element_out=source,
-                                scale=seed_scale, elasticity=elasticity)
+                                scale=seed_scale, elasticity=elasticity, add=add)
 
         out = out.fbs.scale_add(element_in="processing",element_out=source,
-                                scale=processing_scale, elasticity=elasticity)
+                                scale=processing_scale, elasticity=elasticity, add=add)
 
     else:
-        out = fbs.fbs.scale_add(element_in="feed", element_out=source,
-                                scale=feed_scale)
+        out = ons_fbs.fbs.scale_add(element_in="feed", element_out=source,
+                                scale=feed_scale, add=add)
 
         out = out.fbs.scale_add(element_in="seed",element_out=source,
-                                scale=seed_scale)
+                                scale=seed_scale, add=add)
 
         out = out.fbs.scale_add(element_in="processing",element_out=source,
-                                scale=processing_scale)
+                                scale=processing_scale, add=add)
 
 
     return out
@@ -2155,5 +2161,252 @@ def generate_API_url(
         url += f"{key}={datablock['run_params'][key]}&"
 
     datablock["URL"] = url
+
+    return datablock
+
+
+def consumption_proportional_scaling(
+        fbs,
+        items,
+        scale,
+        element,
+        year=None,
+        adoption=None,
+        timescale=10,
+        origin=None,
+        add=True,
+        constant=False,
+        non_sel_items=None,
+        fallback=None,
+        add_fallback=True
+        ):
+    """Scale items quantities across multiple elements in a FoodBalanceSheet
+    Dataset
+
+    Scales selected item quantities on a food balance sheet and with the
+    posibility to keep the sum of selected elements constant.
+    Optionally, produce an Dataset with a sequence of quantities over the years
+    following a smooth scaling according to the selected functional form.
+
+    The elements used to supply the modified quantities can be selected to keep
+    a balanced food balance sheet.
+
+    Parameters
+    ----------
+    fbs : xarray.Dataset
+        Input food balance sheet Dataset.
+    items : list
+        List of items to scale in the food balance sheet.
+    element : string
+        Name of the DataArray to scale.
+    scale : float
+        Scaling parameter after full adoption.
+    adoption : string, optional
+        Shape of the scaling adoption curve. "logistic" uses a logistic model
+        for a slow-fast-slow adoption. "linear" uses a constant slope adoption
+        during the the "timescale period"
+    year : int, optional
+        Year of the Food Balance Sheet to use as pivot. If not set, the last
+        year of the array is used
+    timescale : int, optional
+        Timescale for the scaling to be applied completely.  If "year" +
+        "timescale" is greater than the last year in the array, it is extended
+        to accomodate the extra years.
+    origin : string, optional
+        Name of the DataArray which will be used to balance the food balance
+        sheets. Any change to the "element" DataArray will be reflected in this
+        DataArray.
+    add : bool, optional
+        If set to True, the scaled element difference is added to the "origin"
+        DataArray. If False, it is subtracted.
+    elasticity : float, float array_like optional
+        Fractional percentage of the difference that is added to each
+        element in origin.
+    constant : bool, optional
+        If set to True, the sum of element remains constant by scaling the non
+        selected items accordingly.
+    non_sel_items : list, optional
+        List of items to scale to achieve constant quantity sum when constant
+        is set to True.
+    fallback : string, optional
+        Name of the DataArray used to provide the excess required to balance
+        the food balance sheet in case the "origin" falls below zero.
+    add_fallback : bool, optional
+        If set to True, the excessis added to the fallback DataArray. If False,
+        it is subtracted.
+
+    Returns
+    -------
+    data : xarray.Dataarray
+        Food balance sheet Dataset with scaled "food" values.
+    """
+
+    # Check for single item inputs
+    if np.isscalar(items):
+        items = [items]
+
+    if np.isscalar(origin):
+        origin = [origin]
+
+    if np.isscalar(add):
+        add = [add]*len(origin)
+
+    # Check for single item list fbs
+    input_item_list = fbs.Item.values
+    if np.isscalar(input_item_list):
+        input_item_list = [input_item_list]
+        if constant:
+            warnings.warn("Constant set to true but input only has a single item.")
+            constant = False
+
+    # If no items are provided, we scale all of them.
+    if items is None or np.sort(items) is np.sort(input_item_list):
+        items = fbs.Item.values
+        if constant:
+            warnings.warn("Cannot keep food constant when scaling all items.")
+            constant = False
+
+    # Define Dataarray to use as pivot
+    if "Year" in fbs.dims:
+        if year is None:
+            if np.isscalar(fbs.Year.values):
+                year = fbs.Year.values
+                fbs_toscale = fbs
+            else:
+                year = fbs.Year.values[-1]
+                fbs_toscale = fbs.isel(Year=-1)
+        else:
+            fbs_toscale = fbs.sel(Year=year)
+
+    else:
+        fbs_toscale = fbs
+        try:
+            year = fbs.Year.values
+        except AttributeError:
+            year = 0
+
+    # Define scale array based on year range
+    if adoption is not None:
+        if adoption == "linear":
+            from agrifoodpy.utils.scaling import linear_scale as scale_func
+        elif adoption == "logistic":
+            from agrifoodpy.utils.scaling import logistic_scale as scale_func
+        else:
+            raise ValueError("Adoption must be one of 'linear' or 'logistic'")
+
+        y0 = fbs.Year.values[0]
+        y1 = year
+        y2 = np.min([year + timescale, fbs.Year.values[-1]])
+        y3 = fbs.Year.values[-1]
+
+        scale_arr = scale_func(y0, y1, y2, y3, c_init=1, c_end=scale)
+
+        # # Extend the dataset to include all the years of the array
+        # fbs_toscale = fbs_toscale * xr.ones_like(scale_arr)
+
+    else:
+        scale_arr = scale
+
+    # # Modify and return
+    # out = fbs.fbs.scale_add(
+    #     element,
+    #     origin,
+    #     scale_arr,
+    #     items,
+    #     add=add,
+    #     elasticity=elasticity)
+
+    out = fbs.copy(deep=True)
+    sel = {"Item":items}
+
+    out["food"].loc[sel] = out["food"].loc[sel] * scale_arr
+
+    food_ratio = out["food"].loc[sel] / fbs_toscale["food"].loc[sel]
+    out["production"].loc[sel] = fbs_toscale["production"].loc[sel] * food_ratio
+    out["imports"].loc[sel] = fbs_toscale["imports"].loc[sel] * food_ratio
+    out["exports"].loc[sel] = fbs_toscale["exports"].loc[sel] * food_ratio
+
+    if constant:
+
+        delta = out[element] - fbs[element]
+
+        # Scale non selected items
+        if non_sel_items is None:
+            non_sel_items = np.setdiff1d(fbs.Item.values, items)
+
+        non_sel_scale = (fbs.sel(Item=non_sel_items)[element].sum(dim="Item") - delta.sum(dim="Item")) / fbs.sel(Item=non_sel_items)[element].sum(dim="Item")
+
+        # Make sure inf and nan values are not scaled
+        non_sel_scale = non_sel_scale.where(np.isfinite(non_sel_scale)).fillna(1.0)
+
+        if np.any(non_sel_scale < 0):
+            warnings.warn("Additional consumption cannot be compensated by \
+                        reduction of non-selected items")
+
+        # out = out.fbs.scale_add(
+        #     element,
+        #     origin,
+        #     non_sel_scale,
+        #     non_sel_items,
+        #     add=add,
+        #     elasticity=elasticity
+        #     )
+
+        non_sel_sel = {"Item":non_sel_items}
+        out["food"].loc[non_sel_sel] = out["food"].loc[non_sel_sel] * non_sel_scale
+
+        food_ratio_non_sel = out["food"].loc[non_sel_sel] / fbs_toscale["food"].loc[non_sel_sel]
+
+        out["production"].loc[non_sel_sel] = fbs_toscale["production"].loc[non_sel_sel] * food_ratio_non_sel
+        out["imports"].loc[non_sel_sel] = fbs_toscale["imports"].loc[non_sel_sel] * food_ratio_non_sel
+        out["exports"].loc[non_sel_sel] = fbs_toscale["exports"].loc[non_sel_sel] * food_ratio_non_sel
+
+        # If fallback is defined, adjust to prevent negative values
+        if fallback is not None:
+            df = sum(out[org].where(out[org] < 0).fillna(0) for org in origin)
+            out[fallback] -= np.where(add_fallback, -1, 1)*df
+            for org in origin:
+                out[org] = out[org].where(out[org] > 0, 0)
+
+    return out
+
+def remove_redundant_trade(
+        datablock
+        ):
+    
+    def _remove_redundant_trade(fbs):
+        """Removes redundant trade from the food balance sheet.
+
+        This function checks for any products in the food balance sheet that have
+        both imports and exports at the same Item-Year point, and removes the
+        redundant trade by netting imports and exports accordingly.
+
+        Returns
+        -------
+        xarray.Dataset
+            Food balance sheet with redundant trade removed.
+        """
+
+        imports = fbs["imports"]
+        exports = fbs["exports"]
+
+        # Net only where both flows are positive for the same Item-Year entry.
+        overlap = (imports > 0) & (exports > 0)
+
+        fbs["imports"] = xr.where(
+            overlap,
+            xr.where(imports >= exports, imports - exports, 0),
+            imports,
+        )
+        fbs["exports"] = xr.where(
+            overlap,
+            xr.where(exports > imports, exports - imports, 0),
+            exports,
+        )
+
+        return fbs
+
+    for key in ["kCal/cap/day", "g_prot/cap/day", "g_fat/cap/day", "g/cap/day"]:
+        datablock["food"][key] = _remove_redundant_trade(datablock["food"][key])
 
     return datablock

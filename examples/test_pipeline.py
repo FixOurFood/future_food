@@ -50,6 +50,7 @@ advanced_settings = {
     "pop_proj": "Medium",
     "yield_proj":0.0,
     "elasticity":0.5,
+    "reexport_feed":False,
     "baseline_total_emissions":71,
     "baseline_agricultural_emissions":30,
     "ssr_metric":"g/cap/day",
