@@ -35,7 +35,7 @@ def pipeline_setup(
                                    1+params["fruit_veg"]/100,
                                    1+params["pulses"]/100],
 
-                          "items":[[2731, 2732],
+                          "items":[[2731, 2732, 2735, 2736, 2737],
                                    [2733, 2734],
                                    ("Item_group", "Fish, Seafood"),
                                    [2740, 2743, 2948],
@@ -47,8 +47,89 @@ def pipeline_setup(
                           "elasticity":[adv_settings["elasticity"], 1-adv_settings["elasticity"]],
                           "scaling_nutrient":adv_settings["scaling_nutrient"],
                           "constant":True,
-                          "non_sel_items":("Item_group", "Cereals - Excluding Beer")})
+                          "non_sel_items":("Item_group", "Cereals - Excluding Beer"),
+                          "reexport_feed":adv_settings["reexport_feed"]
+                          })
     
+    # pipeline.add_node(item_scaling,
+    #                   {
+    #                       "scale":1+params["ruminant"]/100,
+    #                       "items":[2731, 2732, 2735, 2736, 2737],
+    #                       "source":["production", "imports"],
+    #                       "elasticity":[adv_settings["elasticity"], 1-adv_settings["elasticity"]],
+    #                       "scaling_nutrient":adv_settings["scaling_nutrient"],
+    #                       "constant":True,
+    #                       "non_sel_items":("Item_group", "Cereals - Excluding Beer")
+    #                   })
+
+    # pipeline.add_node(item_scaling,
+    #                   {
+    #                       "scale":1+params["pig_poultry"]/100,
+    #                       "items":[2733, 2734],
+    #                       "source":["production", "imports"],
+    #                       "elasticity":[adv_settings["elasticity"], 1-adv_settings["elasticity"]],
+    #                       "scaling_nutrient":adv_settings["scaling_nutrient"],
+    #                       "constant":True,
+    #                       "non_sel_items":("Item_group", "Cereals - Excluding Beer")
+    #                   })
+    
+    # pipeline.add_node(item_scaling,
+    #                   {
+    #                       "scale":1+params["fish_seafood"]/100,
+    #                       "items":("Item_group", "Fish, Seafood"),
+    #                       "source":["production", "imports"],
+    #                       "elasticity":[adv_settings["elasticity"], 1-adv_settings["elasticity"]],
+    #                       "scaling_nutrient":adv_settings["scaling_nutrient"],
+    #                       "constant":True,
+    #                       "non_sel_items":("Item_group", "Cereals - Excluding Beer")
+    #                   })
+    
+    # pipeline.add_node(item_scaling,
+    #                   {
+    #                       "scale":1+params["dairy"]/100,
+    #                       "items":[2740, 2743, 2948],
+    #                       "source":["production", "imports"],
+    #                       "elasticity":[adv_settings["elasticity"], 1-adv_settings["elasticity"]],
+    #                       "scaling_nutrient":adv_settings["scaling_nutrient"],
+    #                       "constant":True,
+    #                       "non_sel_items":("Item_group", "Cereals - Excluding Beer")
+    #                   })
+    
+    # pipeline.add_node(item_scaling,
+    #                   {
+    #                       "scale":1+params["eggs"]/100,
+    #                       "items":[2949],
+    #                       "source":["production", "imports"],
+    #                       "elasticity":[adv_settings["elasticity"], 1-adv_settings["elasticity"]],
+    #                       "scaling_nutrient":adv_settings["scaling_nutrient"],
+    #                       "constant":True,
+    #                       "non_sel_items":("Item_group", "Cereals - Excluding Beer")
+    #                   })
+    
+    # pipeline.add_node(item_scaling,
+    #                   {
+    #                       "scale":1+params["fruit_veg"]/100,
+    #                       "items":("Item_group", ["Vegetables", "Fruits - Excluding Wine"]),
+    #                       "source":["production", "imports"],
+    #                       "elasticity":[adv_settings["elasticity"], 1-adv_settings["elasticity"]],
+    #                       "scaling_nutrient":adv_settings["scaling_nutrient"],
+    #                       "constant":True,
+    #                       "non_sel_items":("Item_group", "Cereals - Excluding Beer")
+    #                   })
+    
+    # pipeline.add_node(item_scaling,
+    #                   {
+    #                       "scale":1+params["pulses"]/100,
+    #                       "items":("Item_group", ["Pulses"]),
+    #                       "source":["production", "imports"],
+    #                       "elasticity":[adv_settings["elasticity"], 1-adv_settings["elasticity"]],
+    #                       "scaling_nutrient":adv_settings["scaling_nutrient"],
+    #                       "constant":True,
+    #                       "non_sel_items":("Item_group", "Cereals - Excluding Beer")
+    #                   })
+    
+    # --------------------------------
+
     pipeline.add_node(alternative_food_model,
                          {"cultured_scale":params["meat_alternatives"]/100,
                          "labmeat_co2e":adv_settings["labmeat_co2e"],
@@ -75,7 +156,8 @@ def pipeline_setup(
                             {"waste_scale":params["waste"],
                             "kcal_rda":adv_settings["rda_kcal"],
                             "source":["production", "imports"],
-                            "elasticity":[adv_settings["elasticity"], 1-adv_settings["elasticity"]]})
+                            "elasticity":[adv_settings["elasticity"], 1-adv_settings["elasticity"]],
+                            "reexport_feed":adv_settings["reexport_feed"]})
 
     pipeline.add_node(production_land_scale,
                          {"bdleaf_conif_ratio":params["bdleaf_conif_ratio"]/100,}
@@ -277,6 +359,7 @@ def pipeline_setup(
                                    adv_settings["beccs_crops_arable_seq_ha_yr"],
                                    adv_settings["beccs_crops_pasture_seq_ha_yr"]
                                    ]})
+    
     # Compute emissions
     pipeline.add_node(compute_emissions)
 
