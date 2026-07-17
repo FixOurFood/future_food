@@ -171,6 +171,7 @@ def item_scaling_multiple(
     datablock["food"]["g/cap/day"] = out / datablock["food"]["kCal/g_food"]
     datablock["food"]["g_prot/cap/day"] = datablock["food"]["g_prot/g_food"] * datablock["food"]["g/cap/day"]
     datablock["food"]["g_fat/cap/day"] = datablock["food"]["g_fat/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_co2e/cap/day"] = datablock["impact"]["gco2e/gfood"] * datablock["food"]["g/cap/day"]
 
     return datablock
 
@@ -228,6 +229,7 @@ def item_scaling(
     datablock["food"]["g/cap/day"] = out / datablock["food"]["kCal/g_food"]
     datablock["food"]["g_prot/cap/day"] = datablock["food"]["g_prot/g_food"] * datablock["food"]["g/cap/day"]
     datablock["food"]["g_fat/cap/day"] = datablock["food"]["g_fat/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_co2e/cap/day"] = datablock["impact"]["gco2e/gfood"] * datablock["food"]["g/cap/day"]
 
     return datablock
 
@@ -468,6 +470,7 @@ def food_waste_model(
     datablock["food"]["g/cap/day"] = out / datablock["food"]["kCal/g_food"]
     datablock["food"]["g_prot/cap/day"] = datablock["food"]["g_prot/g_food"] * datablock["food"]["g/cap/day"]
     datablock["food"]["g_fat/cap/day"] = datablock["food"]["g_fat/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_co2e/cap/day"] = datablock["impact"]["gco2e/gfood"] * datablock["food"]["g/cap/day"]
 
     return datablock
 
@@ -565,10 +568,12 @@ def alternative_food_model(
     datablock["impact"]["gco2e/gfood"].loc[{"Item":new_items}] = labmeat_co2e
 
     out_kcal_cap_day = scale_kcal_feed(kcal_cap_day, kcal_orig, new_items)
-    ratio = out_kcal_cap_day / kcal_cap_day
-    ratio = ratio.where(~np.isnan(ratio), 1)
-
-    datablock["food"]["g/cap/day"] *= ratio
+    
+    datablock["food"]["kCal/cap/day"] = out_kcal_cap_day
+    # datablock["food"]["g/cap/day"] = out / datablock["food"]["kCal/g_food"]
+    datablock["food"]["g_prot/cap/day"] = datablock["food"]["g_prot/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_fat/cap/day"] = datablock["food"]["g_fat/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_co2e/cap/day"] = datablock["impact"]["gco2e/gfood"] * datablock["food"]["g/cap/day"]
 
     return datablock
 
@@ -649,11 +654,12 @@ def cultured_meat_model(
     kcal_cap_day = datablock["food"]["kCal/cap/day"]
 
     out_kcal_cap_day = scale_kcal_feed(kcal_cap_day, kcal_orig, new_items)
-    ratio = out_kcal_cap_day / kcal_cap_day
-    ratio = ratio.where(~np.isnan(ratio), 1)
-
-    for key in qty_key:
-        datablock["food"][key] *= ratio
+    
+    datablock["food"]["kCal/cap/day"] = out_kcal_cap_day
+    # datablock["food"]["g/cap/day"] = out / datablock["food"]["kCal/g_food"]
+    datablock["food"]["g_prot/cap/day"] = datablock["food"]["g_prot/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_fat/cap/day"] = datablock["food"]["g_fat/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_co2e/cap/day"] = datablock["impact"]["gco2e/gfood"] * datablock["food"]["g/cap/day"]
 
     return datablock
 
@@ -800,10 +806,11 @@ def forest_land_model_new(
     out = check_negative_source(out, "production")
     out = check_negative_source(out, "imports")
 
-    ratio = out / food_orig
-    ratio = ratio.where(~np.isnan(ratio), 1)
-
     datablock["food"]["g/cap/day"] = out
+    datablock["food"]["kCal/cap/day"] = datablock["food"]["kCal/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_prot/cap/day"] = datablock["food"]["g_prot/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_fat/cap/day"] = datablock["food"]["g_fat/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_co2e/cap/day"] = datablock["impact"]["gco2e/gfood"] * datablock["food"]["g/cap/day"]
 
     return datablock
 
@@ -893,14 +900,11 @@ def forest_land_model(
     out = check_negative_source(out, "production")
     out = check_negative_source(out, "imports")
 
-    ratio = out / food_orig
-    ratio = ratio.where(~np.isnan(ratio), 1)
-
-    # Update per cap/day values and per year values using the same ratio, which
-    # is independent of population growth
-    qty_key = ["g/cap/day", "g_prot/cap/day", "g_fat/cap/day", "kCal/cap/day"]
-    for key in qty_key:
-        datablock["food"][key] *= ratio
+    datablock["food"]["g/cap/day"] = out
+    datablock["food"]["kCal/cap/day"] = datablock["food"]["kCal/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_prot/cap/day"] = datablock["food"]["g_prot/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_fat/cap/day"] = datablock["food"]["g_fat/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_co2e/cap/day"] = datablock["impact"]["gco2e/gfood"] * datablock["food"]["g/cap/day"]
 
     # datablock["food"]["g/cap/day"] = out
 
@@ -966,12 +970,12 @@ def peatland_restoration(
                                   scale=scale_spare,
                                   items=scaled_items,
                                   add=False)
-    datablock["food"]["g/cap/day"] = out
-
-    ratio = out / food_orig
-    ratio = ratio.where(~np.isnan(ratio), 1)
 
     datablock["food"]["g/cap/day"] = out
+    datablock["food"]["kCal/cap/day"] = datablock["food"]["kCal/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_prot/cap/day"] = datablock["food"]["g_prot/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_fat/cap/day"] = datablock["food"]["g_fat/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_co2e/cap/day"] = datablock["impact"]["gco2e/gfood"] * datablock["food"]["g/cap/day"]
 
     return datablock
 
@@ -1141,16 +1145,11 @@ def scale_production(
     out = check_negative_source(out, "production", "imports")
     out = check_negative_source(out, "imports", "exports", add=False)
 
-    ratio = out / food_orig
-    ratio = ratio.where(~np.isnan(ratio), 1)
-
-    # Update per cap/day values and per year values using the same ratio, which
-    # is independent of population growth
-    # qty_key = ["g/cap/day", "g_prot/cap/day", "g_fat/cap/day", "kCal/cap/day"]
-    # for key in qty_key:
-    #     datablock["food"][key] *= ratio
-
-    datablock["food"]["g/cap/day" ] *= ratio
+    datablock["food"]["g/cap/day"] = out
+    datablock["food"]["kCal/cap/day"] = datablock["food"]["kCal/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_prot/cap/day"] = datablock["food"]["g_prot/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_fat/cap/day"] = datablock["food"]["g_fat/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_co2e/cap/day"] = datablock["impact"]["gco2e/gfood"] * datablock["food"]["g/cap/day"]
 
     return datablock
 
@@ -1217,9 +1216,11 @@ def BECCS_farm_land(
                                   items=scaled_items,
                                   add=False)
 
-    ratio = out / food_orig
-    ratio = ratio.where(~np.isnan(ratio), 1)
     datablock["food"]["g/cap/day"] = out
+    datablock["food"]["kCal/cap/day"] = datablock["food"]["kCal/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_prot/cap/day"] = datablock["food"]["g_prot/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_fat/cap/day"] = datablock["food"]["g_fat/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_co2e/cap/day"] = datablock["impact"]["gco2e/gfood"] * datablock["food"]["g/cap/day"]
 
     return datablock
 
@@ -1349,13 +1350,11 @@ def agroecology_model(
     # Rewrite land use data to datablock
     datablock["land"]["percentage_land_use"] = pctg
 
-    ratio = out / food_orig
-    ratio = ratio.where(~np.isnan(ratio), 1)
-
-    # Update per cap/day values and per year values using the same ratio, which
-    # is independent of population growth
-
-    datablock["food"]["g/cap/day" ] *= ratio
+    datablock["food"]["g/cap/day"] = out
+    datablock["food"]["kCal/cap/day"] = datablock["food"]["kCal/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_prot/cap/day"] = datablock["food"]["g_prot/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_fat/cap/day"] = datablock["food"]["g_fat/g_food"] * datablock["food"]["g/cap/day"]
+    datablock["food"]["g_co2e/cap/day"] = datablock["impact"]["gco2e/gfood"] * datablock["food"]["g/cap/day"]
 
     return datablock
 
