@@ -3,3 +3,4 @@ xarray
 numpy
 pycryptodome
 scipy
+git+https://github.com/FixOurFood/agrifoodpy-data.git
