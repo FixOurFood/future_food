@@ -44,10 +44,10 @@ def project_future(
 
     years_past = g_cap_day.Year.values
 
-    g_cap_day = g_cap_day.fbs.add_years(years, "constant")
-    g_prot_cap_day = g_prot_cap_day.fbs.add_years(years, "constant")
-    g_fat_cap_day = g_fat_cap_day.fbs.add_years(years, "constant")
-    kcal_cap_day = kcal_cap_day.fbs.add_years(years, "constant")
+    g_cap_day = g_cap_day.fbs.add_years(years, projection="constant")
+    g_prot_cap_day = g_prot_cap_day.fbs.add_years(years, projection="constant")
+    g_fat_cap_day = g_fat_cap_day.fbs.add_years(years, projection="constant")
+    kcal_cap_day = kcal_cap_day.fbs.add_years(years, projection="constant")
 
     # Scale food production
     scale_past = xr.DataArray(
@@ -81,8 +81,8 @@ def project_future(
     # Emissions per gram of food also remain constant
     g_co2e_g = datablock["impact"]["gco2e/gfood"]
     g_co2e_g_land = datablock["impact"]["gco2e/gfood_land"]
-    g_co2e_g = g_co2e_g.fbs.add_years(years, "constant")
-    g_co2e_g_land = g_co2e_g_land.fbs.add_years(years, "constant")
+    g_co2e_g = g_co2e_g.fbs.add_years(years, projection="constant")
+    g_co2e_g_land = g_co2e_g_land.fbs.add_years(years, projection="constant")
 
     datablock["food"]["g/cap/day"] = g_cap_day
     datablock["food"]["g_prot/cap/day"] = g_prot_cap_day
